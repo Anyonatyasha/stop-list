@@ -1,4 +1,4 @@
-import type { CreateStopEntryInput, Dish, StopListEntryView } from './types';
+import type { CreateStopEntryInput, Dish, PaginatedResult, StopListEntryView } from './types';
 
 const BASE_URL = import.meta.env.VITE_API_URL ?? '/api';
 
@@ -33,3 +33,6 @@ export const createStopEntry = (input: CreateStopEntryInput) =>
 
 export const returnStopEntry = (id: string) =>
   request<StopListEntryView>(`/stop-list/${encodeURIComponent(id)}/return`, { method: 'PATCH' });
+
+export const fetchHistory = (limit: number, offset: number) =>
+  request<PaginatedResult<StopListEntryView>>(`/stop-list/history?limit=${limit}&offset=${offset}`);

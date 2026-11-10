@@ -26,3 +26,10 @@ export interface CreateStopEntryInput {
   reason: string;
   durationMinutes: number;
 }
+
+export interface PaginatedResult<T> {
+  items: T[];
+  total: number;
+  limit: number;
+  offset: number;
+}

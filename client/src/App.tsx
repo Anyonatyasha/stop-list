@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ApiError, createStopEntry, fetchActiveStopList, fetchDishes, returnStopEntry } from './api';
+import { ApiError, createStopEntry, fetchActiveStopList, fetchDishes, fetchHistory, returnStopEntry } from './api';
 import { ActiveStopList } from './components/ActiveStopList';
 import { DishList } from './components/DishList';
 import { StopDishForm } from './components/StopDishForm';
-import type { CreateStopEntryInput, Dish, DishCategory, StopListEntryView } from './types';
+import type { CreateStopEntryInput, Dish, DishCategory, PaginatedResult, StopListEntryView } from './types';
+import { HistoryList } from './components/HistoryList';
 
 const POLL_INTERVAL_MS = 10_000;
+const HISTORY_PAGE_SIZE = 5;
 
 const App = () => {
   const [now, setNow] = useState(() => new Date());
@@ -16,6 +18,10 @@ const App = () => {
   const [active, setActive] = useState<StopListEntryView[]>([]);
   const [activeError, setActiveError] = useState<Error | null>(null);
   const [activeLoading, setActiveLoading] = useState(true);
+
+  const [history, setHistory] = useState<PaginatedResult<StopListEntryView> | null>(null);
+  const [historyOffset, setHistoryOffset] = useState(0);
+  const [historyError, setHistoryError] = useState<Error | null>(null);
 
   const [category, setCategory] = useState<DishCategory | ''>('');
   const [selectedDishId, setSelectedDishId] = useState<string | null>(null);
@@ -42,17 +48,30 @@ const App = () => {
       });
   }, []);
 
+  const loadHistory = useCallback(() => {
+    setHistoryError(null);
+    fetchHistory(HISTORY_PAGE_SIZE, historyOffset)
+      .then((result) => {
+        setHistory(result);
+      })
+      .catch((err) => setHistoryError(err instanceof Error ? err : new Error('Не удалось загрузить историю')));
+  }, [historyOffset]);
+
   useEffect(loadDishes, [loadDishes]);
   useEffect(() => loadActive(), [loadActive]);
 
   useEffect(() => {
     const clockId = setInterval(() => setNow(new Date()), 1000);
     const pollId = setInterval(() => loadActive(true), POLL_INTERVAL_MS);
+    const historyPollId = setInterval(() => loadHistory(), POLL_INTERVAL_MS);
     return () => {
       clearInterval(clockId);
       clearInterval(pollId);
+      clearInterval(historyPollId);
     };
-  }, [loadActive]);
+  }, [loadActive, loadHistory]);
+
+  useEffect(() => loadHistory(), [loadHistory]);
 
   const stoppedDishIds = useMemo(() => new Set(active.map((e) => e.dishId)), [active]);
   const visibleActive = useMemo(
@@ -76,6 +95,7 @@ const App = () => {
     try {
       await returnStopEntry(id);
       loadActive();
+      loadHistory();
     } catch (err) {
       if (err instanceof ApiError) console.error(err.message);
     } finally {
@@ -140,6 +160,28 @@ const App = () => {
               returningId={returningId}
             />
           )}
+        </section>
+
+        <section className="panel history-panel">
+          <h2 className="section-title">История</h2>
+          {historyError && (
+            <div className="error-state">
+              <p>Не удалось загрузить историю: {historyError.message}</p>
+              <button type="button" className="btn btn-outline" onClick={() => loadHistory()}>
+                Повторить
+              </button>
+            </div>
+          )}
+          {!historyError && history && (
+            <HistoryList
+              items={history.items}
+              total={history.total}
+              limit={HISTORY_PAGE_SIZE}
+              offset={history.offset}
+              onPageChange={setHistoryOffset}
+            />
+          )}
+
         </section>
       </div>
     </div>
