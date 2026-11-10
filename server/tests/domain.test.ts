@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { calculateExpiresAt, getMinutesLeft, getStatus, isActive, type StopListEntry } from '../src/domain';
+import { calculateExpiresAt, getMinutesLeft, getStatus, isActive, validateCreateStopEntry, type StopListEntry } from '../src/domain';
 
 const makeEntry = (overrides: Partial<StopListEntry> = {}): StopListEntry => ({
   id: 'e1',
@@ -83,5 +83,101 @@ describe('getMinutesLeft', () => {
   it('возвращает 1, если ровно 10 секунд до истечения срока', () => {
     const entry = makeEntry({ expiresAt: '2026-11-10T10:30:00.000Z' });
     expect(getMinutesLeft(entry, new Date('2026-11-10T10:29:50.000Z'))).toBe(1);
+  });
+});
+
+describe('validateCreateStopEntry', () => {
+  const valid = { dishId: 'd1', reason: 'Закончилась говядина', durationMinutes: 60 };
+
+  it('пропускает корректные данные', () => {
+    const { errors, value } = validateCreateStopEntry(valid);
+    expect(errors).toEqual({});     
+    expect(value).toEqual(valid);   
+  });
+
+  it('отклоняет причину короче 5 символов', () => {
+    const { errors, value } = validateCreateStopEntry({ ...valid, reason: 'abcd' });
+    expect(value).toBeUndefined();         
+    expect(errors).toHaveProperty('reason'); 
+  });
+
+  it('пропускает причину ровно из 5 символов', () => {
+    const { errors, value } = validateCreateStopEntry({ ...valid, reason: 'abcde' });
+    expect(errors).toEqual({});
+    expect(value).toEqual({ ...valid, reason: 'abcde' });
+  });
+
+  it('пропускает причину ровно из 200 символов', () => {
+    const longReason = 'a'.repeat(200);
+    const { errors, value } = validateCreateStopEntry({ ...valid, reason: longReason });
+    expect(errors).toEqual({});
+    expect(value).toEqual({ ...valid, reason: longReason });
+  });
+
+  it('отклоняет причину длиннее 200 символов', () => {
+    const longReason = 'a'.repeat(201);
+    const { errors, value } = validateCreateStopEntry({ ...valid, reason: longReason });
+    expect(value).toBeUndefined();         
+    expect(errors).toHaveProperty('reason'); 
+  });
+
+  it('отклоняет причину, состоящую только из пробелов', () => {
+    const { errors, value } = validateCreateStopEntry({ ...valid, reason: '     ' });
+    expect(value).toBeUndefined();         
+    expect(errors).toHaveProperty('reason'); 
+  });
+
+  it('отклоняет срок меньше 15 минут', () => {
+    const { errors, value } = validateCreateStopEntry({ ...valid, durationMinutes: 14 });
+    expect(value).toBeUndefined();         
+    expect(errors).toHaveProperty('durationMinutes'); 
+  });
+
+  it('пропускает срок ровно 15 минут', () => {
+    const { errors, value } = validateCreateStopEntry({ ...valid, durationMinutes: 15 });
+    expect(errors).toEqual({});
+    expect(value).toEqual({ ...valid, durationMinutes: 15 });
+  });
+
+  it('пропускает срок ровно 720 минут', () => {
+    const { errors, value } = validateCreateStopEntry({ ...valid, durationMinutes: 720 });
+    expect(errors).toEqual({});
+    expect(value).toEqual({ ...valid, durationMinutes: 720 });
+  });
+
+  it('отклоняет срок больше 720 минут', () => {
+    const { errors, value } = validateCreateStopEntry({ ...valid, durationMinutes: 721 });
+    expect(value).toBeUndefined();         
+    expect(errors).toHaveProperty('durationMinutes'); 
+  });
+
+  it('отклоняет дробный срок', () => {
+    const { errors, value } = validateCreateStopEntry({ ...valid, durationMinutes: 30.5 });
+    expect(value).toBeUndefined();         
+    expect(errors).toHaveProperty('durationMinutes'); 
+  });
+
+  it('отклоняет срок, переданный строкой', () => {
+    const { errors, value } = validateCreateStopEntry({ ...valid, durationMinutes: '30' });
+    expect(value).toBeUndefined();         
+    expect(errors).toHaveProperty('durationMinutes'); 
+  });
+
+  it('отклоняет пустой dishId', () => {
+    const { errors, value } = validateCreateStopEntry({ ...valid, dishId: '' });
+    expect(value).toBeUndefined();         
+    expect(errors).toHaveProperty('dishId'); 
+  });
+
+  it('не падает на null и возвращает ошибки', () => {
+    const { errors, value } = validateCreateStopEntry(null);
+    expect(value).toBeUndefined();         
+    expect(errors).toHaveProperty('dishId'); 
+    expect(errors).toHaveProperty('reason'); 
+    expect(errors).toHaveProperty('durationMinutes'); 
+  });
+  it('убирает пробелы по краям причины', () => {
+    const { value } = validateCreateStopEntry({ ...valid, reason: '  Закончилась говядина  ' });
+    expect(value?.reason).toBe('Закончилась говядина');
   });
 });
