@@ -100,4 +100,59 @@ describe('StopListService', () => {
       await expect(service.returnDish(entry.id)).rejects.toMatchObject({ code: 'ENTRY_NOT_ACTIVE' });
     });
   });
+
+  describe('getHistory', () => {
+    it('не включает активные записи', async () => {
+      await service.stopDish({ dishId: 'd1', reason: 'Закончилась говядина', durationMinutes: 30 });
+      const history = await service.getHistory(10, 0);
+      expect(history.items).toHaveLength(0);
+      expect(history.total).toBe(0);
+    });
+
+    it('включает возвращённые и истёкшие записи', async () => {
+      const entry1 = await service.stopDish({ dishId: 'd1', reason: 'Закончилась говядина', durationMinutes: 30 });
+      await service.stopDish({ dishId: 'd7', reason: 'Закончился мохито', durationMinutes: 30 });
+
+      advance(10);
+      await service.returnDish(entry1.id);
+      advance(30);  
+      const history = await service.getHistory(10, 0);
+      expect(history.total).toBe(2);
+    });
+
+    it('сортирует от новых к старым', async () => {
+      const entry1 = await service.stopDish({ dishId: 'd1', reason: 'Закончилась говядина', durationMinutes: 30 });
+      await service.stopDish({ dishId: 'd7', reason: 'Закончился мохито', durationMinutes: 60 });
+
+      advance(10);                        
+      await service.returnDish(entry1.id); 
+
+      advance(55);                       
+
+      const history = await service.getHistory(10, 0);
+      expect(history.items[0].dishId).toBe('d7');
+      expect(history.items[1].dishId).toBe('d1');
+    });
+
+    it('делит историю на страницы', async () => {
+      const entry1 = await service.stopDish({ dishId: 'd1', reason: 'Закончилась говядина', durationMinutes: 30 });
+      const entry2 = await service.stopDish({ dishId: 'd2', reason: 'Закончилась баранина', durationMinutes: 30 });
+      const entry3 = await service.stopDish({ dishId: 'd3', reason: 'Закончился лосось', durationMinutes: 30 });
+
+      advance(1);
+      await service.returnDish(entry1.id);
+      advance(1);
+      await service.returnDish(entry2.id);
+      advance(1);
+      await service.returnDish(entry3.id);
+
+      const page1 = await service.getHistory(2, 0);
+      expect(page1.items).toHaveLength(2);
+      expect(page1.total).toBe(3);
+
+      const page2 = await service.getHistory(2, 2);
+      expect(page2.items).toHaveLength(1);
+      expect(page2.total).toBe(3);
+    });
+  });
 });
